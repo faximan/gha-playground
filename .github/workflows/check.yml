@@ -1,0 +1,48 @@
+name: GHA Playground
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  check-content:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Read content.txt
+        id: read_content
+        run: |
+          if [ ! -f content.txt ]; then
+            echo "content.txt not found, defaulting to pass"
+            echo "action=pass" >> $GITHUB_OUTPUT
+          else
+            content=$(cat content.txt | xargs)
+            echo "action=$content" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Fail if requested
+        if: steps.read_content.outputs.action == 'fail'
+        run: |
+          echo "Workflow failed as requested"
+          exit 1
+
+      - name: Cancel if requested
+        if: steps.read_content.outputs.action == 'cancel'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            core.info('Workflow cancelled as requested');
+            await github.rest.actions.cancelWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId,
+            });
+            await new Promise(() => {});
